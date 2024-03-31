@@ -2,21 +2,21 @@ import type { MetaFunction } from '@remix-run/node';
 import clsx from 'clsx';
 import { produce } from 'immer';
 import { useCallback, useMemo, useState } from 'react';
+import { Queue } from './queue';
 
-export const meta: MetaFunction = () => {
-  return [
-    { title: 'my Minesweeper' },
-    { name: 'description', content: 'my minesweeper' },
-  ];
-};
+export const meta: MetaFunction = () => [
+  { title: 'my Minesweeper' },
+  { name: 'description', content: 'my minesweeper' },
+];
 
 // 初級：9×9のマスに10個の地雷（Windows Meまでのバージョンは8×8）
 type Cell = { isOpen: boolean; hasFlag: boolean; hasMine: boolean };
-type Map = Cell[][];
+type GameMap = Cell[][];
+const mapSize = 9;
 
-const getInitialMap = (): Map => {
-  const map = [...Array(9)].map(() =>
-    [...Array(9)].map(() => ({
+const getInitialMap = (): GameMap => {
+  const map = [...Array(mapSize)].map(() =>
+    [...Array(mapSize)].map(() => ({
       isOpen: false,
       hasFlag: false,
       hasMine: false,
@@ -25,27 +25,29 @@ const getInitialMap = (): Map => {
   for (let i = 0; i < 10; i++) {
     let row, col;
     do {
-      row = Math.trunc(Math.random() * 9);
-      col = Math.trunc(Math.random() * 9);
+      row = Math.trunc(Math.random() * mapSize);
+      col = Math.trunc(Math.random() * mapSize);
     } while (map[row][col].hasMine);
     map[row][col].hasMine = true;
   }
   return map;
 };
 const useMap = () => {
-  const [map, setMap] = useState<Map>(() => getInitialMap());
+  const [map, setMap] = useState<GameMap>(() => getInitialMap());
   const mineCount = useMemo(() => {
-    const mineCount = [...Array(9)].map(() => [...Array(9)].map(() => 0));
+    const mineCount = [...Array(mapSize)].map(() =>
+      [...Array(mapSize)].map(() => 0),
+    );
     for (let row = 0; row < mineCount.length; row++) {
       for (let col = 0; col < mineCount[row].length; col++) {
-        for (let i = 0; i < 9; i++) {
+        for (let i = 0; i < mapSize; i++) {
           const dr = dx[i],
             dc = dy[i];
           const r = row + dr,
             c = col + dc;
           if (
             (dr === 0 && dc === 0) ||
-            !(0 <= r && r < 9 && 0 <= c && c < 9) ||
+            !(0 <= r && r < mapSize && 0 <= c && c < mapSize) ||
             !map[r][c].hasMine
           ) {
             continue;
@@ -63,37 +65,25 @@ const useMap = () => {
       (row: number, col: number) => {
         setMap((map) =>
           produce(map, (draft) => {
-            class Queue<T> {
-              constructor(private queue: T[] = []) {}
-              pop() {
-                const val = this.queue.shift();
-                if (typeof val === 'undefined') throw new Error();
-                return val;
-              }
-              push(val: T) {
-                this.queue.push(val);
-              }
-              isEmpty() {
-                return this.queue.length === 0;
-              }
-            }
             const queue = new Queue<[number, number]>();
             queue.push([row, col]);
             while (!queue.isEmpty()) {
               const [row, col] = queue.pop();
               draft[row][col].isOpen = true;
-              if (mineCount[row][col] === 0)
-                for (let i = 0; i < 9; i++) {
-                  const r = row + dx[i],
-                    c = col + dy[i];
-                  if (
-                    (dx[i] === 0 && dy[i] === 0) ||
-                    !(0 <= r && r < 9 && 0 <= c && c < 9) ||
-                    draft[r][c].isOpen
-                  )
-                    continue;
-                  queue.push([r, c]);
-                }
+              if (mineCount[row][col] !== 0) {
+                continue;
+              }
+              for (let i = 0; i < mapSize; i++) {
+                const r = row + dx[i],
+                  c = col + dy[i];
+                if (
+                  (dx[i] === 0 && dy[i] === 0) ||
+                  !(0 <= r && r < mapSize && 0 <= c && c < mapSize) ||
+                  draft[r][c].isOpen
+                )
+                  continue;
+                queue.push([r, c]);
+              }
             }
           }),
         );
